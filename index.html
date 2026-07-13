@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shift Allowance Ledger — Team Edition</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
+<style>
+  :root{
+    --bg: #F3F5F3;
+    --surface: #FFFFFF;
+    --ink: #1B222C;
+    --muted: #6B7280;
+    --border: #DEE3E0;
+    --accent: #0F6E6E;
+    --accent-dark: #0A5252;
+    --accent-soft: #E4F1EF;
+    --weekend: #E8A33D;
+    --weekend-soft: #FBF0DD;
+    --danger: #C1503F;
+    --danger-soft: #FBEAE7;
+    --radius: 10px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:var(--ink); font-family:'Inter',sans-serif; font-size:14px; line-height:1.5;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  header.topbar{
+    position:sticky; top:0; z-index:20;
+    background:var(--ink); color:#fff;
+    padding:14px 24px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+  }
+  .brand{display:flex; flex-direction:column; gap:2px;}
+  .brand .eyebrow{font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--weekend);}
+  .brand h1{margin:0; font-size:18px; font-weight:600;}
+  .topbar-actions{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
+  .stat-chip{font-family:'IBM Plex Mono',monospace; font-size:11.5px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.16); border-radius:999px; padding:6px 12px; color:#DCE7E5;}
+  .stat-chip.ok{background:rgba(15,110,110,.35); border-color:rgba(15,110,110,.6);}
+  .stat-chip.warn{background:rgba(232,163,61,.22); border-color:rgba(232,163,61,.55);}
+  button{font-family:'Inter',sans-serif; font-weight:600; font-size:13px; border-radius:8px; border:1px solid transparent; padding:9px 16px; cursor:pointer; transition:transform .06s ease, background .15s ease, border-color .15s ease;}
+  button:active{transform:translateY(1px);}
+  button:disabled{opacity:.5; cursor:not-allowed;}
+  .btn-accent{background:var(--accent); color:#fff;}
+  .btn-accent:hover{background:var(--accent-dark);}
+  .btn-ghost{background:transparent; border-color:rgba(255,255,255,.35); color:#fff;}
+  .btn-ghost:hover{border-color:#fff;}
+  .btn-outline{background:#fff; border-color:var(--border); color:var(--ink);}
+  .btn-outline:hover{border-color:var(--accent); color:var(--accent);}
+  .btn-danger-outline{background:#fff; border-color:var(--danger); color:var(--danger); padding:5px 10px; font-size:12px;}
+  .btn-danger-outline:hover{background:var(--danger-soft);}
+  .btn-small{padding:6px 11px; font-size:12px;}
+
+  .banner{max-width:1180px; margin:16px auto 0 auto; padding:0 24px;}
+  .banner-inner{
+    border-radius:8px; padding:12px 16px; font-size:13px;
+    display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+  }
+  .banner-inner.offline{background:#FBF0DD; border:1px solid var(--weekend); color:#8A5A11;}
+  .banner-inner.error{background:var(--danger-soft); border:1px solid var(--danger); color:#8A2E20;}
+  .banner-inner.info{background:var(--accent-soft); border:1px solid var(--accent); color:var(--accent-dark);}
+
+  main{max-width:1180px; margin:0 auto; padding:24px; display:grid; grid-template-columns: 1.3fr 1fr; gap:20px;}
+  @media (max-width:900px){ main{grid-template-columns:1fr;} }
+
+  .card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:20px;}
+  .card h2{margin:0 0 4px 0; font-size:15px; font-weight:700;}
+  .card .card-sub{margin:0 0 16px 0; color:var(--muted); font-size:12.5px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block; font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px;}
+  .field input[type=text], .field input[type=date], .field input[type=number], .field input[type=url], .field select{
+    width:100%; padding:9px 10px; border:1px solid var(--border); border-radius:7px; font-size:14px; font-family:'Inter',sans-serif; background:#fff; color:var(--ink);
+  }
+  .field input:focus, .field select:focus{outline:2px solid var(--accent); outline-offset:1px; border-color:var(--accent);}
+  .field-row{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  .readonly-box{padding:9px 10px; border:1px dashed var(--border); border-radius:7px; background:var(--bg); color:var(--ink); font-family:'IBM Plex Mono',monospace; font-size:13px; min-height:37px; display:flex; align-items:center;}
+  .toggle-row{display:flex; gap:10px;}
+  .toggle-btn{flex:1; padding:9px 10px; border:1px solid var(--border); border-radius:7px; background:#fff; color:var(--muted); font-weight:600; font-size:13px; cursor:pointer; text-align:center;}
+  .toggle-btn.active-yes{background:var(--accent-soft); border-color:var(--accent); color:var(--accent-dark);}
+  .toggle-btn.active-no{background:#F1F2F0; border-color:var(--border); color:var(--ink);}
+  .weekend-badge{display:inline-flex; align-items:center; gap:6px; padding:9px 10px; border-radius:7px; font-family:'IBM Plex Mono',monospace; font-size:13px; font-weight:600; width:100%;}
+  .weekend-badge.yes{background:var(--weekend-soft); color:#8A5A11; border:1px solid var(--weekend);}
+  .weekend-badge.no{background:var(--bg); color:var(--muted); border:1px dashed var(--border);}
+  .day-strip{display:flex; gap:4px; flex-wrap:wrap; margin-top:8px;}
+  .day-chip{font-family:'IBM Plex Mono',monospace; font-size:10.5px; padding:4px 6px; border-radius:5px; background:var(--bg); color:var(--muted); border:1px solid var(--border);}
+  .day-chip.weekend{background:var(--weekend-soft); color:#8A5A11; border-color:var(--weekend); font-weight:700;}
+  .day-strip-note{font-size:11.5px; color:var(--muted); margin-top:6px;}
+  .submit-row{display:flex; justify-content:flex-end; margin-top:6px;}
+
+  details.setup-panel{border:1px solid var(--border); border-radius:8px; margin-bottom:12px; background:#fff;}
+  details.setup-panel > summary{padding:12px 14px; cursor:pointer; font-weight:600; font-size:13.5px; list-style:none; display:flex; align-items:center; justify-content:space-between;}
+  details.setup-panel > summary::-webkit-details-marker{display:none;}
+  details.setup-panel .panel-body{padding:0 14px 14px 14px;}
+  .mini-row{display:flex; gap:8px; margin-bottom:8px; align-items:center;}
+  .mini-row input{flex:1; padding:7px 8px; border:1px solid var(--border); border-radius:6px; font-size:13px;}
+  .mini-list{max-height:160px; overflow-y:auto; margin-top:6px;}
+  .mini-item{display:flex; justify-content:space-between; align-items:center; padding:6px 8px; border-bottom:1px solid var(--border); font-size:12.5px;}
+  .mini-item:last-child{border-bottom:none;}
+  .mini-item .mi-info{font-family:'IBM Plex Mono',monospace;}
+
+  .full-width{grid-column:1 / -1;}
+  table{width:100%; border-collapse:collapse;}
+  thead th{text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); border-bottom:2px solid var(--border); padding:8px 10px;}
+  tbody td{padding:10px; border-bottom:1px solid var(--border); font-size:13px;}
+  tbody tr.weekend-row{border-left:3px solid var(--weekend);}
+  tbody tr:not(.weekend-row){border-left:3px solid transparent;}
+  .amt{font-family:'IBM Plex Mono',monospace; font-weight:600;}
+  .pill{display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; font-family:'IBM Plex Mono',monospace;}
+  .pill-yes{background:var(--accent-soft); color:var(--accent-dark);}
+  .pill-no{background:#F1F2F0; color:var(--muted);}
+  .pill-weekend-yes{background:var(--weekend-soft); color:#8A5A11;}
+  .pill-weekend-no{background:#F1F2F0; color:var(--muted);}
+  .empty-state{padding:36px 20px; text-align:center; color:var(--muted);}
+  .empty-state .es-title{font-weight:700; color:var(--ink); margin-bottom:4px;}
+  .table-footer{display:flex; justify-content:space-between; align-items:center; padding-top:12px; margin-top:6px; border-top:1px dashed var(--border); font-size:12.5px; color:var(--muted);}
+  .footnote{max-width:1180px; margin:0 auto 40px auto; padding:0 24px; color:var(--muted); font-size:12px;}
+  ::-webkit-scrollbar{width:8px;}
+  ::-webkit-scrollbar-thumb{background:var(--border); border-radius:4px;}
+
+  /* modal */
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(20,25,30,.55);
+    display:none; align-items:center; justify-content:center; z-index:50; padding:20px;
+  }
+  .modal-overlay.open{display:flex;}
+  .modal{background:#fff; border-radius:12px; max-width:520px; width:100%; padding:24px; max-height:88vh; overflow-y:auto;}
+  .modal h3{margin:0 0 4px 0; font-size:16px;}
+  .modal p.modal-sub{margin:0 0 18px 0; color:var(--muted); font-size:12.5px;}
+  .modal-actions{display:flex; justify-content:flex-end; gap:10px; margin-top:16px;}
+  .help-text{font-size:11.5px; color:var(--muted); margin-top:4px;}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="eyebrow">Shift Allowance Ledger</span>
+    <h1>Team Edition</h1>
+  </div>
+  <div class="topbar-actions">
+    <span class="stat-chip" id="connectionChip">Not connected</span>
+    <span class="stat-chip" id="recordCountChip">0 entries</span>
+    <button class="btn-ghost" id="settingsBtn">Settings</button>
+    <button class="btn-accent" id="signInBtn">Sign in with Microsoft</button>
+    <button class="btn-accent" id="exportBtn">Export to Excel</button>
+  </div>
+</header>
+
+<div class="banner" id="bannerWrap"></div>
+
+<main>
+  <section class="card">
+    <h2>Log a shift allowance</h2>
+    <p class="card-sub">Pick the employee and shift — the number and daily rate fill in on their own.</p>
+    <form id="entryForm">
+      <div class="field-row">
+        <div class="field">
+          <label for="employeeSelect">Employee</label>
+          <select id="employeeSelect" required><option value="" disabled selected>Select employee…</option></select>
+        </div>
+        <div class="field">
+          <label>Employee number</label>
+          <div class="readonly-box" id="employeeNumberBox">—</div>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="shiftSelect">Type of shift</label>
+          <select id="shiftSelect" required><option value="" disabled selected>Select shift…</option></select>
+        </div>
+        <div class="field">
+          <label for="amountInput">Shift amount per day</label>
+          <input type="number" id="amountInput" step="0.01" min="0">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label for="startDate">Start date</label><input type="date" id="startDate" required></div>
+        <div class="field"><label for="endDate">End date</label><input type="date" id="endDate" required></div>
+      </div>
+      <div class="field">
+        <label>Dinner allowance</label>
+        <div class="toggle-row">
+          <button type="button" class="toggle-btn" data-toggle="dinner" data-val="Y">Yes</button>
+          <button type="button" class="toggle-btn active-no" data-toggle="dinner" data-val="N">No</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Include weekends (auto)</label>
+        <div class="weekend-badge no" id="weekendBadge">N — no weekend in range</div>
+        <div class="day-strip" id="dayStrip"></div>
+        <div class="day-strip-note" id="dayStripNote"></div>
+      </div>
+      <div class="submit-row"><button type="submit" class="btn-accent" id="submitEntryBtn">Add entry</button></div>
+    </form>
+  </section>
+
+  <section>
+    <details class="setup-panel" open>
+      <summary>Employee master <span class="mono" style="font-size:11px;color:var(--muted);">shared list</span></summary>
+      <div class="panel-body">
+        <div class="mini-row">
+          <input type="text" id="newEmpNumber" placeholder="Employee number (EMP001)">
+          <input type="text" id="newEmpName" placeholder="Employee name">
+          <button class="btn-outline" id="addEmployeeBtn" type="button">Add</button>
+        </div>
+        <div class="mini-list" id="employeeList"></div>
+      </div>
+    </details>
+    <details class="setup-panel">
+      <summary>Shift rates <span class="mono" style="font-size:11px;color:var(--muted);">per day, shared</span></summary>
+      <div class="panel-body" id="ratesPanel"></div>
+    </details>
+    <div class="card" style="margin-top:12px;">
+      <h2>How this works</h2>
+      <p class="card-sub" style="margin-bottom:0;">
+        Once connected, every associate signs in with their Microsoft account and sees the same live
+        Employees, Rates, and Records — all stored in your SharePoint lists. Not connected yet? See
+        <strong>Settings</strong> to link it up, or use it locally in the meantime.
+      </p>
+    </div>
+  </section>
+
+  <section class="card full-width">
+    <h2>Records</h2>
+    <p class="card-sub">Every logged allowance, most recent first.</p>
+    <div id="tableWrap">
+      <div class="empty-state"><div class="es-title">No entries yet</div><div>Add your first shift allowance using the form above.</div></div>
+    </div>
+    <div class="table-footer" id="tableFooter" style="display:none;">
+      <span id="footerCount"></span><span id="footerTotal"></span>
+    </div>
+  </section>
+</main>
+
+<p class="footnote">
+  Team Edition reads and writes to shared SharePoint lists via Microsoft Graph, so all signed-in
+  associates see the same data. If SharePoint isn't connected yet, entries save to this browser only.
+</p>
+
+<!-- SETTINGS MODAL -->
+<div class="modal-overlay" id="settingsOverlay">
+  <div class="modal">
+    <h3>Connect to SharePoint</h3>
+    <p class="modal-sub">Ask your Bosch IT / Azure admin for these values — see the setup guide for how to create them.</p>
+
+    <div class="field">
+      <label for="cfgTenantId">Tenant ID</label>
+      <input type="text" id="cfgTenantId" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+    </div>
+    <div class="field">
+      <label for="cfgClientId">App (client) ID</label>
+      <input type="text" id="cfgClientId" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+    </div>
+    <div class="field">
+      <label for="cfgSiteUrl">SharePoint site URL</label>
+      <input type="url" id="cfgSiteUrl" placeholder="https://bosch.sharepoint.com/sites/YourTeamSite">
+      <div class="help-text">The full URL of the SharePoint site that holds your lists.</div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label for="cfgEmpList">Employees list name</label><input type="text" id="cfgEmpList" value="ShiftEmployees"></div>
+      <div class="field"><label for="cfgRatesList">Rates list name</label><input type="text" id="cfgRatesList" value="ShiftRates"></div>
+    </div>
+    <div class="field">
+      <label for="cfgEntriesList">Entries list name</label>
+      <input type="text" id="cfgEntriesList" value="ShiftAllowanceEntries">
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-outline" id="downloadGuideBtn" type="button">Download setup guide</button>
+      <button class="btn-outline" id="closeSettingsBtn" type="button">Cancel</button>
+      <button class="btn-accent" id="saveSettingsBtn" type="button">Save &amp; sign in</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const DEFAULT_RATES = { 'Morning Shift': 50, 'Evening Shift': 50, 'Night Shift': 100, '24/7 Support': 150 };
+  const DEFAULT_EMPLOYEES = [{ number:'EMP001', name:'Employee 1' }];
+
+  let employees = [];
+  let rates = {};
+  let entries = [];
+  let dinnerVal = 'N';
+
+  let spConfig = null;          // {tenantId, clientId, hostname, sitePath, empList, ratesList, entriesList}
+  let spState = { connected:false, siteId:null, empListId:null, ratesListId:null, entriesListId:null };
+  let msalInstance = null;
+  let account = null;
+
+  const el = id => document.getElementById(id);
+  const employeeSelect = el('employeeSelect');
+  const employeeNumberBox = el('employeeNumberBox');
+  const shiftSelect = el('shiftSelect');
+  const amountInput = el('amountInput');
+  const startDateEl = el('startDate');
+  const endDateEl = el('endDate');
+  const weekendBadge = el('weekendBadge');
+  const dayStrip = el('dayStrip');
+  const dayStripNote = el('dayStripNote');
+  const entryForm = el('entryForm');
+  const employeeList = el('employeeList');
+  const ratesPanel = el('ratesPanel');
+  const tableWrap = el('tableWrap');
+  const tableFooter = el('tableFooter');
+  const footerCount = el('footerCount');
+  const footerTotal = el('footerTotal');
+  const recordCountChip = el('recordCountChip');
+  const connectionChip = el('connectionChip');
+  const bannerWrap = el('bannerWrap');
+  const signInBtn = el('signInBtn');
+  const submitEntryBtn = el('submitEntryBtn');
+
+  // ---------- helpers ----------
+  function pad(n){ return n.toString().padStart(2,'0'); }
+  function isoToDisplay(iso){ if(!iso) return ''; const [y,m,d]=iso.split('-'); return `${d}-${m}-${y}`; }
+  function dayLabel(d){ return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()]; }
+  function rangeDays(startIso, endIso){
+    const start = new Date(startIso+'T00:00:00'), end = new Date(endIso+'T00:00:00');
+    const out = []; if(isNaN(start)||isNaN(end)||start>end) return out;
+    let cur = new Date(start), guard=0;
+    while(cur<=end && guard<400){ out.push(new Date(cur)); cur.setDate(cur.getDate()+1); guard++; }
+    return out;
+  }
+  function includesWeekend(s,e){ return rangeDays(s,e).some(d=>d.getDay()===0||d.getDay()===6); }
+
+  function showBanner(kind, html, autoHideMs){
+    bannerWrap.innerHTML = `<div class="banner-inner ${kind}"><span>${html}</span></div>`;
+    if(autoHideMs){ setTimeout(()=>{ if(bannerWrap.innerHTML.includes(html)) bannerWrap.innerHTML=''; }, autoHideMs); }
+  }
+  function clearBanner(){ bannerWrap.innerHTML=''; }
+
+  // ---------- local storage fallback ----------
+  function localGet(key){ return localStorage.getItem(key); }
+  function localSet(key, value){ localStorage.setItem(key, value); }
+
+  // ---------- MSAL / Graph ----------
+  function loadSpConfig(){
+    const raw = localStorage.getItem('sp-config');
+    return raw ? JSON.parse(raw) : null;
+  }
+  function saveSpConfig(cfg){ localStorage.setItem('sp-config', JSON.stringify(cfg)); }
+
+  function buildMsal(){
+    msalInstance = new msal.PublicClientApplication({
+      auth: {
+        clientId: spConfig.clientId,
+        authority: `https://login.microsoftonline.com/${spConfig.tenantId}`,
+        redirectUri: window.location.href.split('#')[0]
+      },
+      cache: { cacheLocation: 'localStorage' }
+    });
+  }
+
+  async function signIn(){
+    if(!spConfig){ el('settingsOverlay').classList.add('open'); return; }
+    try{
+      buildMsal();
+      const result = await msalInstance.loginPopup({ scopes:['Sites.ReadWrite.All'] });
+      account = result.account;
+      msalInstance.setActiveAccount(account);
+      connectionChip.textContent = `Connecting…`;
+      await connectToSharePoint();
+    }catch(e){
+      showBanner('error', `Sign-in failed: ${e.message || e}`);
+    }
+  }
+
+  async function getToken(){
+    const req = { scopes:['Sites.ReadWrite.All'], account };
+    try{ return (await msalInstance.acquireTokenSilent(req)).accessToken; }
+    catch(e){ return (await msalInstance.acquireTokenPopup(req)).accessToken; }
+  }
+
+  async function graphFetch(path, options={}){
+    const token = await getToken();
+    const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
+      ...options,
+      headers: { 'Authorization':`Bearer ${token}`, 'Content-Type':'application/json', ...(options.headers||{}) }
+    });
+    if(!res.ok){ const text = await res.text(); throw new Error(`Graph ${res.status}: ${text.slice(0,200)}`); }
+    if(res.status===204) return null;
+    return res.json();
+  }
+
+  async function resolveSiteId(){
+    const cacheKey = `sp-site-id::${spConfig.hostname}${spConfig.sitePath}`;
+    const cached = localStorage.getItem(cacheKey);
+    if(cached) return cached;
+    const data = await graphFetch(`/sites/${spConfig.hostname}:${spConfig.sitePath}`);
+    localStorage.setItem(cacheKey, data.id);
+    return data.id;
+  }
+  async function resolveListId(siteId, displayName){
+    const cacheKey = `sp-list-id::${siteId}::${displayName}`;
+    const cached = localStorage.getItem(cacheKey);
+    if(cached) return cached;
+    const data = await graphFetch(`/sites/${siteId}/lists?$select=id,displayName`);
+    const match = data.value.find(l => l.displayName.toLowerCase() === displayName.toLowerCase());
+    if(!match) throw new Error(`List "${displayName}" wasn't found on that SharePoint site.`);
+    localStorage.setItem(cacheKey, match.id);
+    return match.id;
+  }
+  async function listGetItems(listId){
+    const data = await graphFetch(`/sites/${spState.siteId}/lists/${listId}/items?expand=fields&$top=999`);
+    return data.value.map(it => ({ id: it.id, ...it.fields }));
+  }
+  async function listAddItem(listId, fields){
+    const data = await graphFetch(`/sites/${spState.siteId}/lists/${listId}/items`, { method:'POST', body: JSON.stringify({fields}) });
+    return data.id;
+  }
+  async function listDeleteItem(listId, itemId){
+    await graphFetch(`/sites/${spState.siteId}/lists/${listId}/items/${itemId}`, { method:'DELETE' });
+  }
+
+  async function connectToSharePoint(){
+    try{
+      spState.siteId = await resolveSiteId();
+      spState.empListId = await resolveListId(spState.siteId, spConfig.empList);
+      spState.ratesListId = await resolveListId(spState.siteId, spConfig.ratesList);
+      spState.entriesListId = await resolveListId(spState.siteId, spConfig.entriesList);
+      spState.connected = true;
+      connectionChip.textContent = `Connected · ${account.username}`;
+      connectionChip.className = 'stat-chip ok';
+      signInBtn.textContent = 'Signed in';
+      signInBtn.disabled = true;
+      clearBanner();
+      await loadAllFromSharePoint();
+    }catch(e){
+      spState.connected = false;
+      connectionChip.textContent = 'Connection failed';
+      connectionChip.className = 'stat-chip warn';
+      showBanner('error', `Couldn't connect to SharePoint: ${e.message}. Check Settings, then try signing in again.`);
+    }
+  }
+
+  async function loadAllFromSharePoint(){
+    const empItems = await listGetItems(spState.empListId);
+    employees = empItems.map(it => ({ spId: it.id, number: it.Title, name: it.EmployeeName || it.Title }));
+
+    const rateItems = await listGetItems(spState.ratesListId);
+    rates = {};
+    rateItems.forEach(it => { rates[it.Title] = parseFloat(it.RatePerDay) || 0; });
+    if(Object.keys(rates).length === 0) rates = Object.assign({}, DEFAULT_RATES);
+
+    const entryItems = await listGetItems(spState.entriesListId);
+    entries = entryItems.map(it => ({
+      id: it.id, spId: it.id,
+      employeeNumber: it.EmployeeNumber, employeeName: it.EmployeeName,
+      shiftType: it.ShiftType, amount: parseFloat(it.Amount) || 0,
+      startDate: (it.StartDate||'').slice(0,10), endDate: (it.EndDate||'').slice(0,10),
+      dinnerAllowance: it.DinnerAllowance, includeWeekends: it.IncludeWeekends
+    })).sort((a,b) => b.spId - a.spId);
+
+    renderEmployeeOptions(); renderEmployeeList(); renderShiftOptions(); renderRatesPanel(); renderTable();
+  }
+
+  // ---------- data layer (routes to SharePoint or local) ----------
+  async function persistEmployeesLocal(){ localSet('shift-employees', JSON.stringify(employees)); }
+  async function persistRatesLocal(){ localSet('shift-rates', JSON.stringify(rates)); }
+  async function persistEntriesLocal(){ localSet('shift-entries', JSON.stringify(entries)); }
+
+  async function addEmployee(number, name){
+    if(spState.connected){
+      const id = await listAddItem(spState.empListId, { Title:number, EmployeeName:name });
+      employees.push({ spId:id, number, name });
+    } else {
+      employees.push({ number, name });
+      await persistEmployeesLocal();
+    }
+  }
+  async function removeEmployee(idx){
+    const emp = employees[idx];
+    if(spState.connected && emp.spId){ await listDeleteItem(spState.empListId, emp.spId); }
+    employees.splice(idx,1);
+    if(!spState.connected) await persistEmployeesLocal();
+  }
+  async function setRate(key, value){
+    rates[key] = value;
+    if(spState.connected){
+      const rateItems = await listGetItems(spState.ratesListId);
+      const match = rateItems.find(it => it.Title === key);
+      if(match){
+        await graphFetch(`/sites/${spState.siteId}/lists/${spState.ratesListId}/items/${match.id}/fields`, {
+          method:'PATCH', body: JSON.stringify({ RatePerDay: value })
+        });
+      } else {
+        await listAddItem(spState.ratesListId, { Title:key, RatePerDay:value });
+      }
+    } else {
+      await persistRatesLocal();
+    }
+  }
+  async function addEntry(entry){
+    if(spState.connected){
+      const id = await listAddItem(spState.entriesListId, {
+        EmployeeNumber: entry.employeeNumber, EmployeeName: entry.employeeName,
+        ShiftType: entry.shiftType, Amount: entry.amount,
+        StartDate: entry.startDate, EndDate: entry.endDate,
+        DinnerAllowance: entry.dinnerAllowance, IncludeWeekends: entry.includeWeekends
+      });
+      entry.id = id; entry.spId = id;
+      entries.unshift(entry);
+    } else {
+      entry.id = Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+      entries.unshift(entry);
+      await persistEntriesLocal();
+    }
+  }
+  async function deleteEntry(id){
+    const entry = entries.find(e => e.id === id);
+    if(spState.connected && entry && entry.spId){ await listDeleteItem(spState.entriesListId, entry.spId); }
+    entries = entries.filter(e => e.id !== id);
+    if(!spState.connected) await persistEntriesLocal();
+  }
+
+  // ---------- rendering (same as standalone version) ----------
+  function renderEmployeeOptions(){
+    employeeSelect.innerHTML = '<option value="" disabled selected>Select employee…</option>';
+    employees.forEach(e => { const o=document.createElement('option'); o.value=e.number; o.textContent=`${e.name} (${e.number})`; employeeSelect.appendChild(o); });
+  }
+  function renderEmployeeList(){
+    employeeList.innerHTML = '';
+    if(employees.length===0){ employeeList.innerHTML = '<div style="color:var(--muted); font-size:12.5px; padding:6px 0;">No employees yet. Add one above.</div>'; return; }
+    employees.forEach((e, idx) => {
+      const row = document.createElement('div'); row.className='mini-item';
+      row.innerHTML = `<span class="mi-info">${e.number} — ${e.name}</span>`;
+      const del = document.createElement('button'); del.className='btn-danger-outline'; del.textContent='Remove';
+      del.onclick = async () => { try{ await removeEmployee(idx); renderEmployeeOptions(); renderEmployeeList(); }catch(e2){ showBanner('error', e2.message); } };
+      row.appendChild(del); employeeList.appendChild(row);
+    });
+  }
+  function renderShiftOptions(){
+    shiftSelect.innerHTML = '<option value="" disabled selected>Select shift…</option>';
+    Object.keys(rates).forEach(k => { const o=document.createElement('option'); o.value=k; o.textContent=k; shiftSelect.appendChild(o); });
+  }
+  function renderRatesPanel(){
+    ratesPanel.innerHTML = '';
+    Object.keys(rates).forEach(k => {
+      const row = document.createElement('div'); row.className='mini-row';
+      row.innerHTML = `<span style="flex:1; font-size:13px;">${k}</span><input type="number" step="0.01" min="0" style="flex:0 0 110px;" value="${rates[k]}" data-rate-key="${k}">`;
+      ratesPanel.appendChild(row);
+    });
+    ratesPanel.querySelectorAll('input[data-rate-key]').forEach(inp => {
+      inp.addEventListener('change', async () => {
+        const key = inp.dataset.rateKey;
+        try{ await setRate(key, parseFloat(inp.value)||0); if(shiftSelect.value===key) amountInput.value = rates[key]; }
+        catch(e){ showBanner('error', e.message); }
+      });
+    });
+  }
+  function updateWeekendPreview(){
+    const s = startDateEl.value, e = endDateEl.value;
+    dayStrip.innerHTML = ''; dayStripNote.textContent = '';
+    if(!s || !e){ weekendBadge.className='weekend-badge no'; weekendBadge.textContent='N — pick both dates'; return; }
+    const start = new Date(s+'T00:00:00'), end = new Date(e+'T00:00:00');
+    if(start > end){ weekendBadge.className='weekend-badge no'; weekendBadge.textContent='End date is before start date'; return; }
+    const days = rangeDays(s,e);
+    const weekend = days.some(d => d.getDay()===0||d.getDay()===6);
+    weekendBadge.className = 'weekend-badge ' + (weekend?'yes':'no');
+    weekendBadge.textContent = weekend ? 'Y — this range includes a weekend day' : 'N — Monday to Friday only';
+    if(days.length<=31){ days.forEach(d=>{ const c=document.createElement('div'); const wk=d.getDay()===0||d.getDay()===6; c.className='day-chip'+(wk?' weekend':''); c.textContent=`${dayLabel(d)} ${pad(d.getDate())}`; dayStrip.appendChild(c); }); }
+    else{ dayStripNote.textContent = `Range spans ${days.length} days — showing weekend summary only.`; }
+  }
+  function renderTable(){
+    recordCountChip.textContent = `${entries.length} ${entries.length===1?'entry':'entries'}`;
+    if(entries.length===0){ tableWrap.innerHTML = `<div class="empty-state"><div class="es-title">No entries yet</div><div>Add your first shift allowance using the form above.</div></div>`; tableFooter.style.display='none'; return; }
+    let total = 0;
+    const rows = entries.map(en => { total += en.amount; return `
+      <tr class="${en.includeWeekends==='Y'?'weekend-row':''}">
+        <td class="mono">${en.employeeNumber}</td><td>${en.employeeName}</td><td>${en.shiftType}</td>
+        <td class="amt">${Number(en.amount).toFixed(2)}</td>
+        <td class="mono">${isoToDisplay(en.startDate)}</td><td class="mono">${isoToDisplay(en.endDate)}</td>
+        <td><span class="pill ${en.dinnerAllowance==='Y'?'pill-yes':'pill-no'}">${en.dinnerAllowance}</span></td>
+        <td><span class="pill ${en.includeWeekends==='Y'?'pill-weekend-yes':'pill-weekend-no'}">${en.includeWeekends}</span></td>
+        <td><button class="btn-danger-outline" data-del="${en.id}">Delete</button></td>
+      </tr>`; }).join('');
+    tableWrap.innerHTML = `<table><thead><tr><th>Employee No.</th><th>Name</th><th>Type of Shift</th><th>Amount/Day</th><th>Start Date</th><th>End Date</th><th>Dinner (Y/N)</th><th>Weekend (Y/N)</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+    tableFooter.style.display = 'flex';
+    footerCount.textContent = `${entries.length} record${entries.length===1?'':'s'}`;
+    footerTotal.textContent = `Total logged: ${total.toFixed(2)} / day`;
+    tableWrap.querySelectorAll('[data-del]').forEach(btn => {
+      btn.addEventListener('click', async () => { try{ await deleteEntry(btn.dataset.del); renderTable(); }catch(e){ showBanner('error', e.message); } });
+    });
+  }
+
+  // ---------- events ----------
+  employeeSelect.addEventListener('change', () => { const emp = employees.find(e=>e.number===employeeSelect.value); employeeNumberBox.textContent = emp?emp.number:'—'; });
+  shiftSelect.addEventListener('change', () => { amountInput.value = rates[shiftSelect.value] ?? ''; });
+  startDateEl.addEventListener('change', updateWeekendPreview);
+  endDateEl.addEventListener('change', updateWeekendPreview);
+  document.querySelectorAll('[data-toggle="dinner"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      dinnerVal = btn.dataset.val;
+      document.querySelectorAll('[data-toggle="dinner"]').forEach(b=>b.classList.remove('active-yes','active-no'));
+      btn.classList.add(dinnerVal==='Y'?'active-yes':'active-no');
+    });
+  });
+  el('addEmployeeBtn').addEventListener('click', async () => {
+    const numEl = el('newEmpNumber'), nameEl = el('newEmpName');
+    const number = numEl.value.trim(), name = nameEl.value.trim();
+    if(!number || !name) return;
+    if(employees.some(e => e.number.toLowerCase()===number.toLowerCase())){ alert('An employee with that number already exists.'); return; }
+    try{ await addEmployee(number, name); numEl.value=''; nameEl.value=''; renderEmployeeOptions(); renderEmployeeList(); }
+    catch(e){ showBanner('error', e.message); }
+  });
+  entryForm.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const empNumber = employeeSelect.value, emp = employees.find(e=>e.number===empNumber);
+    const shiftType = shiftSelect.value, amount = parseFloat(amountInput.value)||0;
+    const s = startDateEl.value, e = endDateEl.value;
+    if(!emp || !shiftType || !s || !e){ alert('Please fill in employee, shift type, and both dates.'); return; }
+    if(new Date(s) > new Date(e)){ alert('End date must be on or after the start date.'); return; }
+    const weekend = includesWeekend(s,e) ? 'Y' : 'N';
+    const entry = { employeeNumber:emp.number, employeeName:emp.name, shiftType, amount, startDate:s, endDate:e, dinnerAllowance:dinnerVal, includeWeekends:weekend };
+    submitEntryBtn.disabled = true; submitEntryBtn.textContent = 'Saving…';
+    try{
+      await addEntry(entry);
+      renderTable();
+      entryForm.reset(); employeeNumberBox.textContent='—'; amountInput.value=''; dinnerVal='N';
+      document.querySelectorAll('[data-toggle="dinner"]').forEach(b=>b.classList.remove('active-yes','active-no'));
+      document.querySelector('[data-toggle="dinner"][data-val="N"]').classList.add('active-no');
+      updateWeekendPreview();
+    }catch(e2){ showBanner('error', `Couldn't save entry: ${e2.message}`); }
+    finally{ submitEntryBtn.disabled=false; submitEntryBtn.textContent='Add entry'; }
+  });
+  el('exportBtn').addEventListener('click', () => {
+    if(entries.length===0){ alert('No entries to export yet.'); return; }
+    const data = entries.map(en => ({
+      'Employee Number': en.employeeNumber, 'Type of Shift': en.shiftType, 'Shift Amount Per Day': en.amount,
+      'Start Date': isoToDisplay(en.startDate), 'End Date': isoToDisplay(en.endDate),
+      'Dinner Allowance (Y/N)': en.dinnerAllowance, 'Include Weekends (Y/N) - Auto': en.includeWeekends
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    ws['!cols'] = [{wch:16},{wch:16},{wch:20},{wch:14},{wch:14},{wch:20},{wch:24}];
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Shift Allowance');
+    const today = new Date();
+    XLSX.writeFile(wb, `shift_allowance_${today.getFullYear()}${pad(today.getMonth()+1)}${pad(today.getDate())}.xlsx`);
+  });
+
+  // settings modal
+  signInBtn.addEventListener('click', signIn);
+  el('settingsBtn').addEventListener('click', () => {
+    if(spConfig){
+      el('cfgTenantId').value = spConfig.tenantId||'';
+      el('cfgClientId').value = spConfig.clientId||'';
+      el('cfgSiteUrl').value = spConfig.siteUrl||'';
+      el('cfgEmpList').value = spConfig.empList||'ShiftEmployees';
+      el('cfgRatesList').value = spConfig.ratesList||'ShiftRates';
+      el('cfgEntriesList').value = spConfig.entriesList||'ShiftAllowanceEntries';
+    }
+    el('settingsOverlay').classList.add('open');
+  });
+  el('closeSettingsBtn').addEventListener('click', () => el('settingsOverlay').classList.remove('open'));
+  el('saveSettingsBtn').addEventListener('click', async () => {
+    const tenantId = el('cfgTenantId').value.trim();
+    const clientId = el('cfgClientId').value.trim();
+    const siteUrl = el('cfgSiteUrl').value.trim();
+    const empList = el('cfgEmpList').value.trim() || 'ShiftEmployees';
+    const ratesList = el('cfgRatesList').value.trim() || 'ShiftRates';
+    const entriesList = el('cfgEntriesList').value.trim() || 'ShiftAllowanceEntries';
+    if(!tenantId || !clientId || !siteUrl){ alert('Tenant ID, Client ID, and Site URL are all required.'); return; }
+    let url;
+    try{ url = new URL(siteUrl); }catch(e){ alert('That site URL doesn\'t look valid.'); return; }
+    spConfig = { tenantId, clientId, hostname:url.hostname, sitePath:url.pathname.replace(/\/$/,''), siteUrl, empList, ratesList, entriesList };
+    saveSpConfig(spConfig);
+    el('settingsOverlay').classList.remove('open');
+    clearBanner();
+    await signIn();
+  });
+  el('downloadGuideBtn').addEventListener('click', () => {
+    const guide = buildSetupGuideText();
+    const blob = new Blob([guide], {type:'text/markdown'});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'shift-allowance-sharepoint-setup.md'; a.click();
+  });
+
+  function buildSetupGuideText(){
+    return `# Shift Allowance Ledger — SharePoint Setup Guide
+
+## 1. Create three SharePoint lists
+On the SharePoint site you want to use, create these lists with these exact column names (no spaces), so Microsoft Graph can map fields directly.
+
+### List: ShiftEmployees
+- Title (default column) -> Employee Number
+- EmployeeName (Single line of text)
+
+### List: ShiftRates
+- Title (default column) -> Shift type name, e.g. "Morning Shift"
+- RatePerDay (Number)
+
+### List: ShiftAllowanceEntries
+- EmployeeNumber (Single line of text)
+- EmployeeName (Single line of text)
+- ShiftType (Single line of text)
+- Amount (Number)
+- StartDate (Date Only)
+- EndDate (Date Only)
+- DinnerAllowance (Single line of text) -> values "Y" or "N"
+- IncludeWeekends (Single line of text) -> values "Y" or "N"
+
+## 2. Register an Azure AD App
+In the Azure Portal (portal.azure.com) -> Azure Active Directory -> App registrations -> New registration:
+- Name: Shift Allowance Ledger
+- Supported account types: Single tenant (your organization only)
+- Platform: Single-page application (SPA)
+- Redirect URI: the exact URL where you will host this HTML file (e.g. a SharePoint document library URL)
+
+Then under API permissions:
+- Add a permission -> Microsoft Graph -> Delegated permissions -> Sites.ReadWrite.All
+- Click "Grant admin consent" (this step needs a Global/Application admin — likely your Bosch IT/Azure team)
+
+Note the Application (client) ID and Directory (tenant) ID from the Overview page — you'll paste these into the app's Settings panel.
+
+## 3. Host the file
+Upload this HTML file to a SharePoint document library (or any internal web server reachable over https).
+Make sure the redirect URI in the App Registration matches exactly where it ends up living.
+
+## 4. Connect the app
+Open the hosted file, click Settings, and fill in:
+- Tenant ID
+- App (client) ID
+- SharePoint site URL (e.g. https://bosch.sharepoint.com/sites/YourTeamSite)
+- The three list names (defaults match the names above)
+
+Click "Save & sign in" — each associate does this once with their own Microsoft account,
+and from then on everyone sees the same shared Employees, Rates, and Entries.
+
+## Notes on permissions
+Sites.ReadWrite.All grants access to all SharePoint sites in the tenant, which is broad — that's
+why admin consent is required. If your security team wants something tighter, ask them about
+Sites.Selected, which scopes the app to just this one site, at the cost of one extra one-time
+Graph call an admin has to run to grant that specific access.
+`;
+  }
+
+  // ---------- init ----------
+  async function init(){
+    spConfig = loadSpConfig();
+    const empRaw = localGet('shift-employees');
+    employees = empRaw ? JSON.parse(empRaw) : DEFAULT_EMPLOYEES.slice();
+    const ratesRaw = localGet('shift-rates');
+    rates = ratesRaw ? JSON.parse(ratesRaw) : Object.assign({}, DEFAULT_RATES);
+    const entriesRaw = localGet('shift-entries');
+    entries = entriesRaw ? JSON.parse(entriesRaw) : [];
+
+    renderEmployeeOptions(); renderEmployeeList(); renderShiftOptions(); renderRatesPanel(); renderTable(); updateWeekendPreview();
+
+    if(!spConfig){
+      showBanner('offline', 'Not connected to SharePoint yet — working locally in this browser. Open <strong>Settings</strong> to connect your team.');
+      return;
+    }
+    connectionChip.textContent = 'Configured — sign in to sync';
+    showBanner('info', 'SharePoint is configured. Click <strong>Sign in with Microsoft</strong> to load the shared data.');
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
