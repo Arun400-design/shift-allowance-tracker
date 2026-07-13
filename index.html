@@ -367,6 +367,18 @@
     return { hostname:url.hostname, sitePath:url.pathname.replace(/\/$/,'') || '/', siteUrl:`${url.origin}${url.pathname.replace(/\/$/,'')}` };
   }
 
+  function normalizeSpConfig(cfg){
+    if(!cfg || !cfg.siteUrl) return cfg;
+    try{
+      const parsedSite = parseSharePointSiteUrl(cfg.siteUrl);
+      const normalized = { ...cfg, hostname:parsedSite.hostname, sitePath:parsedSite.sitePath, siteUrl:parsedSite.siteUrl };
+      if(normalized.hostname !== cfg.hostname || normalized.sitePath !== cfg.sitePath || normalized.siteUrl !== cfg.siteUrl){
+        saveSpConfig(normalized);
+      }
+      return normalized;
+    }catch(e){ return cfg; }
+  }
+
   // ---------- local storage fallback ----------
   function localGet(key){ return localStorage.getItem(key); }
   function localSet(key, value){ localStorage.setItem(key, value); }
@@ -774,7 +786,7 @@ Graph call an admin has to run to grant that specific access.
 
   // ---------- init ----------
   async function init(){
-    spConfig = loadSpConfig();
+    spConfig = normalizeSpConfig(loadSpConfig());
     const empRaw = localGet('shift-employees');
     employees = empRaw ? JSON.parse(empRaw) : DEFAULT_EMPLOYEES.slice();
     const ratesRaw = localGet('shift-rates');
