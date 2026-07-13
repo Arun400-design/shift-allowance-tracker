@@ -390,12 +390,16 @@
   }
   function saveSpConfig(cfg){ localStorage.setItem('sp-config', JSON.stringify(cfg)); }
 
+  function getRedirectUri(){
+    return `${window.location.origin}${window.location.pathname}`;
+  }
+
   function buildMsal(){
     msalInstance = new window.msal.PublicClientApplication({
       auth: {
         clientId: spConfig.clientId,
         authority: `https://login.microsoftonline.com/${spConfig.tenantId}`,
-        redirectUri: window.location.href.split('#')[0]
+        redirectUri: getRedirectUri()
       },
       cache: { cacheLocation: 'localStorage' }
     });
@@ -406,7 +410,7 @@
     try{
       await ensureMsalLoaded();
       buildMsal();
-      const result = await msalInstance.loginPopup({ scopes:['Sites.ReadWrite.All'] });
+      const result = await msalInstance.loginPopup({ scopes:['Sites.ReadWrite.All'], redirectUri:getRedirectUri() });
       account = result.account;
       msalInstance.setActiveAccount(account);
       connectionChip.textContent = `Connecting…`;
@@ -754,7 +758,7 @@ In the Azure Portal (portal.azure.com) -> Azure Active Directory -> App registra
 - Name: Shift Allowance Ledger
 - Supported account types: Single tenant (your organization only)
 - Platform: Single-page application (SPA)
-- Redirect URI: the exact URL where you will host this HTML file (e.g. a SharePoint document library URL)
+- Redirect URI: the exact URL where you will host this HTML file, e.g. https://arun400-design.github.io/shift-allowance-tracker/
 
 Then under API permissions:
 - Add a permission -> Microsoft Graph -> Delegated permissions -> Sites.ReadWrite.All
